@@ -1,0 +1,63 @@
+1. When a user takes a picture, that picture is stored in a path based on the given
+URI. In which part of the code handles this? (Copy that part of the code as the
+answer)
+
+= Bagian kode yang paling bertanggung jawab untuk mempersiapkan file dan path (jalur) sebelum kamera dibuka adalah fungsi generatePhotoUri di dalam file ProviderFileManager.kt.
+
+  Kode ini tidak menyimpan fotonya (itu dilakukan oleh aplikasi kamera), tetapi kode inilah yang menciptakan file kosong di lokasi yang spesifik dan menghasilkan URI (alamat) untuk file tersebut. URI inilah yang kemudian diberikan kepada aplikasi kamera sebagai tujuan penyimpanan.
+// Bagian kode dari file ProviderFileManager.kt [cite: 466]
+fun generatePhotoUri(time: Long): FileInfo {
+    val name = "img_$time.jpg"
+    // Get the file object
+    // The file will be stored in the folder defined in
+    // file_provider_paths.xml
+    val file = File(
+        context.getExternalFilesDir(fileHelper.getPicturesFolder()),
+        name
+    )
+    return FileInfo(
+        fileHelper.getUriFromFile(file),
+        file,
+        name,
+        fileHelper.getPicturesFolder(),
+        "image/jpeg"
+    )
+}
+
+2. In your FileInfo.kt, there are 5 attributes. On the first attribute, what does the URI
+refer to? And on the fourth attribute, what does relativePath refer to?
+
+= Berdasarkan file FileInfo.kt :
+
+  Atribut pertama (uri): Ini merujuk pada sebuah URI (alamat) sementara yang dibuat oleh FileProvider. Anggap saja ini sebagai "kunci tamu" yang aman. Alamat ini bukan lokasi file yang sebenarnya, melainkan sebuah pointer aman yang Anda berikan kepada aplikasi lain (seperti Kamera) . Ini memberi izin kepada aplikasi Kamera untuk menulis data foto ke file yang telah Anda siapkan, tanpa memberikan akses penuh ke seluruh penyimpanan aplikasi Anda.
+
+
+  Atribut keempat (relativePath): Ini merujuk pada nama folder tujuan di dalam galeri publik (MediaStore) tempat foto akan disalin. Dalam modul ini, nilainya adalah Environment.DIRECTORY_PICTURES, yang biasanya berarti folder "Pictures". Ini digunakan agar MediaStore (Galeri) tahu cara mengelompokkan foto Anda dengan benar setelah foto itu disalin dari penyimpanan internal aplikasi Anda ke penyimpanan publik.
+
+3. [Bonus] Explain the chronological order from when a user takes a picture until
+the file is stored in the MediaStore.
+
+= Berikut adalah alur lengkap prosesnya, dijelaskan langkah demi langkah:
+
+  1. Persiapan "Slot Parkir" (File Kosong) Saat Anda menekan tombol "Photo", aplikasi tidak langsung membuka kamera. Pertama-tama, ia memanggil generatePhotoUri. Fungsi ini membuat sebuah file kosong (misalnya "img_12345.jpg") di dalam folder penyimpanan internal aplikasi Anda . Anggap ini seperti memesan satu slot parkir khusus.
+
+  2. Membuat "Kunci Tamu" (URI FileProvider) Setelah file kosong dibuat, FileProvider  membuatkan sebuah URI sementara (seperti content://...) yang menunjuk ke file kosong tadi. Ini adalah "kunci tamu" yang aman, yang hanya bisa mengakses "slot parkir" tadi.
+
+  3. Memberikan Kunci ke Kamera Aplikasi Anda kemudian meluncurkan aplikasi Kamera (takePictureLauncher.launch) dan memberikan "kunci tamu" (URI) ini.
+
+  4. Kamera "Memarkir" Foto Anda mengambil foto. Aplikasi Kamera menggunakan "kunci tamu" (URI) yang diterimanya untuk menemukan "slot parkir" (file kosong) tadi dan menyimpan data foto langsung ke dalamnya.
+
+  5. Kamera Melapor "Selesai" Setelah foto berhasil disimpan, aplikasi Kamera ditutup dan mengirim sinyal "berhasil" kembali ke aplikasi Anda. Ini memicu callback (blok kode) dari registerForActivityResult.
+
+  6. Membuat Salinan untuk Galeri (MediaStore) Di dalam callback tadi, aplikasi Anda memanggil insertImageToStore. Fungsi ini melakukan hal berikut secara terpisah (di background thread ):
+
+
+  - Ia menghubungi MediaStore (sistem galeri HP) dan berkata, "Tolong buatkan satu slot baru untuk foto di folder 'Pictures'".
+
+  - MediaStore membuat slot baru dan memberikan URI publiknya (misalnya, content://media/external/images/...).
+
+  - Aplikasi Anda kemudian menyalin (copy) file foto dari "slot parkir" internalnya ke "slot galeri" yang baru menggunakan IOUtils.copy.
+
+
+
+  Selesai File foto kini ada di dua tempat: satu di penyimpanan internal aplikasi Anda (yang tersembunyi) dan satu lagi salinannya di galeri publik (yang bisa dilihat semua orang).
